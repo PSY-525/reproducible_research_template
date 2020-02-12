@@ -11,29 +11,137 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 library(tidyverse)
 library(knitr)
-
-#source("mcSummary_function.R")
+library(finalfit)
 ```
 
-<!-- It looks like you call a `mcSummary_function.R` file. -->
-<!-- If you were distributing your template for someone else to run, you would need to include it with this document. -->
-<!-- So, for example, I had to create a dummy function with that name in order to render your report. -->
+```{r mcSummary function, message=TRUE, warning=TRUE, include=FALSE}
+require(car)
 
-**What did I learn from creating this R markdown template? I haven't done much with Rmd before, so...**
-   
-- Text formatting
-    - Headers
-    - Lists
-    - Italics, bold, etc. 
-- Different options for showing/hiding code and output
-- Table of contents in HTML output
-- Including R code snippets within text
+mcSummary <- function (object, correlation = FALSE, symbolic.cor = FALSE, 
+                       ...) 
+{
+  z <- object
+  p <- z$rank
+  rdf <- z$df.residual
+  if (p == 0) {
+    r <- z$residuals
+    n <- length(r)
+    w <- z$weights
+    if (is.null(w)) {
+      rss <- sum(r^2)
+    }
+    else {
+      rss <- sum(w * r^2)
+      r <- sqrt(w) * r
+    }
+    resvar <- rss/rdf
+    ans <- z[c("call", if (!is.null(z$weights)) "weights")]
+    df <- c(0L, n, n)
+    SS <- c(NA, rss, rss)
+    MS <- c(NA, resvar, resvar)
+    F.list <- c(NA, NA, NA)
+    r.squared <- adj.r.squared <- NA
+    PRE.list <- c(r.squared, NA, NA)
+    p.list <- c(NA, NA, NA)
+    ans$anova <- round(cbind(SS, df, MS, PRE.list, F.list, p.list), digits = 3)
+    dimnames(ans$anova) <- list(c("Model", "Error", "Corr Total"), c("SS", "df", "MS", "EtaSq", "F", "p"))
+    rmse <- sqrt(resvar)
+    ans$extras <- round(rbind(c(rmse, adj.r.squared)), digits = 3)
+    dimnames(ans$extras) <- list("Model", c("RMSE", "AdjEtaSq"))
+    return(ans)
+  }
+  
+  if (is.null(z$terms)) 
+    stop("invalid 'lm' object:  no 'terms' component")
+  if (!inherits(object, "lm")) 
+    warning("calling summary.lm(<fake-lm-object>) ...")
+  Qr <- object$qr# qr.lm(object)
+  n <- NROW(Qr$qr)
+  if (is.na(z$df.residual) || n - p != z$df.residual) 
+    warning("residual degrees of freedom in object suggest this is not an \"lm\" fit")
+  r <- z$residuals
+  f <- z$fitted.values
+  w <- z$weights
+  if (is.null(w)) {
+    mss <- if (attr(z$terms, "intercept")) 
+      sum((f - mean(f))^2)
+    else sum(f^2)
+    rss <- sum(r^2)
+  }
+  else {
+    mss <- if (attr(z$terms, "intercept")) {
+      m <- sum(w * f/sum(w))
+      sum(w * (f - m)^2)
+    }
+    else sum(w * f^2)
+    rss <- sum(w * r^2)
+    r <- sqrt(w) * r
+  }
+  resvar <- rss/rdf
+  if (is.finite(resvar) && resvar < (mean(f)^2 + var(f)) * 
+      1e-30) 
+    warning("essentially perfect fit: summary may be unreliable")
+  p1 <- 1L:p
+  R <- chol2inv(Qr$qr[p1, p1, drop = FALSE])
+  se <- sqrt(diag(R) * resvar)
+  est <- z$coefficients[Qr$pivot[p1]]
+  tval <- est/se
+  fval <- tval^2
+  SS3val <- fval*resvar
+  PREval <- SS3val/(SS3val+rss)
+  ans <- z[c("call", if (!is.null(z$weights)) "weights")]
+  if (attr(z$terms, "intercept")==1) {
+    df.int <- 1L
+    r.squared <- mss/(mss + rss)
+    adj.r.squared <- 1 - (1 - r.squared) * ((n - df.int)/rdf)
+    omni.F <- NA
+    omni.p <- NA
+    
+  }
+  else {
+    df.int <- 0L
+    r.squared <- adj.r.squared <- NA
+    omni.F <- NA
+    omni.p <- NA
+  }
+  if ((p-df.int>=1) & (df.int==1)) { 
+    omni.F <- (mss/(p - df.int))/resvar
+    omni.p <- pf(omni.F,p-df.int,rdf,lower.tail = FALSE)
+  }
+  if ((p-df.int>=2) & (df.int==1)) { 
+    tol <- c(NA, 1/vif(z)) 
+  }
+  else { 
+    tol <- rep(NA,p) 
+  }
+  df <- c(p-df.int, rdf, n-df.int)
+  SS <- c(mss, rss, mss+rss)
+  MS <- c(mss/(p-df.int), resvar, (mss+rss)/(rdf+p-df.int))
+  F.list <- c(omni.F, NA, NA)
+  PRE.list <- c(r.squared, NA, NA)
+  p.list <- c(omni.p, NA, NA)
+  ans$anova <- round(cbind(SS, df, MS, PRE.list, F.list, p.list), digits = 3)
+  dimnames(ans$anova) <- list(c("Model", "Error", "Corr Total"), c("SS", "df", "MS", "EtaSq", "F", "p"))
+  rmse <- sqrt(resvar)
+  CI <- confint(z) 
+  ans$extras <- round(rbind(c(rmse, adj.r.squared)), digits = 3)
+  dimnames(ans$extras) <- list("Model", c("RMSE", "AdjEtaSq"))
+  ans$coefficients <- round(cbind(est, se, tval, SS3val, PREval, tol, CI, 
+                                  2 * pt(abs(tval), rdf, lower.tail = FALSE)), digits=3)
+  dimnames(ans$coefficients) <- list(names(z$coefficients)[Qr$pivot[p1]], 
+                                     c("Est", "StErr", "t", "SSR(3)", "EtaSq", "tol", "CI_2.5", "CI_97.5", "p"))
+  if (!is.null(z$na.action)) 
+    ans$na.action <- z$na.action
+  #  class(ans) <- "summary.lm"
+  return(ans)
+}
 
-**How would these features be useful?**
-   
-I'm planning to use Rmarkdown to create a presentation about my Master's research project proposal to give to my labmates/mentor -- the formatting will be really great for readable slides, and I'll be able to import my data/provide summary statistics/etc. all by knitting one document, rather than copy&pasting! 
+```
+
+<!-- mcSummary function included within the report now, rather than sourced -->
 
 # Background
 <!-- Give a bit of an exposition to the project, can omit for more technical reports -->
@@ -76,7 +184,11 @@ Include study design steps here
 ## Inclusion/Exclusion Criteria
 Explicate criteria
 
+## Load & Clean Data
 <!-- Data Cleaning Code insert, or source R script -->
+<!-- Ensure that data object and/or data cleaning script (as needed) 
+     are within the current Rproj location -->
+
 ```{r Data Cleaning, echo=TRUE}
 # load("your_data_here.rda")
 # source("your_data_cleaning_script_here.R")
@@ -100,7 +212,8 @@ YOURDATA$sex <- factor(YOURDATA$sex, levels = c(1, 2), labels = c("female", "mal
 head(YOURDATA)
 ```
 
-<!-- If you loaded your own data, replace YOURDATA with the name of your actual dataframe -->
+<!-- If you loaded your own data, replace YOURDATA with the name of your actual dataframe
+     + change all variable names as needed -->
 
 ## Summary/demographic statistics of sample
 Include code output for overall sample stats (N, mean age, gender breakdown, etc.)
@@ -118,43 +231,37 @@ Include code output for overall sample stats (N, mean age, gender breakdown, etc
 ### Defining items, subscales, groups for analysis
 Whatever specific variables, group divisions, etc. will be used in the analyses in the next section
 
-<!-- A newer and more explicit way of calling functions with dependencies on external packages is this: `tables::tabular` -->
-
-<!-- I suggest using a more descriptive name than `table`. -->
-
 ## Group comparison table
 ```{r Group Table, echo=FALSE, message=FALSE, warning=FALSE}
-library(tables)
-table <- tabular((group + 1) ~ (n = 1) + sex +
-                   Format(digits = 2)*(age + var1 + var2)*(mean + sd), 
-                 data=YOURDATA)
-table
+## grpCompareTable <- tables::tabular((group + 1) ~ (n = 1) + sex +
+##                      Format(digits = 2)*(age + var1 + var2)*(mean + sd), 
+##                       data=YOURDATA)
+## grpCompareTable
+
+# There is a more appropriate package to create this kind of table!
+# Crosstable 
+explanatory = c("age", "sex", "var1", "var2")
+dependent = 'group'
+grpCompareTable <- YOURDATA %>%
+  finalfit::summary_factorlist(dependent, explanatory, 
+  p=TRUE, add_dependent_label=TRUE)
+knitr::kable(grpCompareTable, align=c("l", "l", "r", "r", "r"))
+
 ```
-
-*At this point I wanted to make the table prettier, but using functions like `latex()` or `html()` just printed the table code rather than the pretty table. I couldn't figure out how to make it work.*
-
-I don't know the `tables` package well.
-It might not work especially well with `knitr::kable()`.
-
-```{r}
-class(table)
-```
-
-I suggest exploring the `kableExtra` [package](http://haozhu233.github.io/kableExtra/awesome_table_in_html.html).
 
 ## Analyses
 ```{r Analysis 1, echo=FALSE, message=FALSE, warning=FALSE}
-## Example analysis
-asscn <- lm(var2 ~ var1, data = YOURDATA)
-
-# Again, I recommend using descriptive names.
-
-# I commented-out the next command because I don't have code for this function.
-#mcSummary(asscn)
+# Example analysis
+## IF USING REAL DATA, use appropriate variable and model names
+### The object names here are merely illustrative
 
 ggplot(YOURDATA, aes(x=var1, y=var2)) + 
   geom_point() +
   geom_smooth(method="lm")
+
+asscn <- lm(var2 ~ var1, data = YOURDATA)
+
+mcSummary(asscn)
 
 ```
 
