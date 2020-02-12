@@ -1,0 +1,191 @@
+---
+title: "Report Template"
+author: "Natalie Pottschmidt"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+
+#source("mcSummary_function.R")
+```
+
+<!-- It looks like you call a `mcSummary_function.R` file. -->
+<!-- If you were distributing your template for someone else to run, you would need to include it with this document. -->
+<!-- So, for example, I had to create a dummy function with that name in order to render your report. -->
+
+**What did I learn from creating this R markdown template? I haven't done much with Rmd before, so...**
+   
+- Text formatting
+    - Headers
+    - Lists
+    - Italics, bold, etc. 
+- Different options for showing/hiding code and output
+- Table of contents in HTML output
+- Including R code snippets within text
+
+**How would these features be useful?**
+   
+I'm planning to use Rmarkdown to create a presentation about my Master's research project proposal to give to my labmates/mentor -- the formatting will be really great for readable slides, and I'll be able to import my data/provide summary statistics/etc. all by knitting one document, rather than copy&pasting! 
+
+# Background
+<!-- Give a bit of an exposition to the project, can omit for more technical reports -->
+
+## Topic 1
+- Point
+    - Evidence
+    - Evidence
+- Point
+    - Evidence
+    - Evidence
+
+## Topic 2
+- Point
+    - Evidence
+    - Evidence
+- Point
+    - Evidence
+    - Evidence
+    
+# Current Study Proposal
+
+## Key Observation
+The driving force behind this study; what is the overall motivating observation or question?
+
+## Possible Explanations
+<!-- (Optional) -->
+Ways that the observation might be explained, or the current state of the literature on the question (e.g. are there divides, etc.)
+
+## Research Questions
+1. Question/hypothesis 1
+2. Question/hypothesis 2
+3. Question/hypothesis 3
+
+# Method
+
+## Procedure
+Include study design steps here
+
+## Inclusion/Exclusion Criteria
+Explicate criteria
+
+<!-- Data Cleaning Code insert, or source R script -->
+```{r Data Cleaning, echo=TRUE}
+# load("your_data_here.rda")
+# source("your_data_cleaning_script_here.R")
+```
+
+<!-- For an example dataset -->
+```{r Fake Data, echo=TRUE}
+id <- 1:20
+sex <- as.factor(rep(c("female","male"), each = 10))
+age <- rep(c(21:25), 4)
+group <- rep(c(0,1), 10)
+
+set.seed(1215)
+var1 <- sample(1:10, 20, replace=T)
+var2 <- sample(25:87, 20, replace=T)
+
+YOURDATA <- as.data.frame(cbind(id, group, sex, age, var1, var2))
+YOURDATA$group <- factor(YOURDATA$group, levels = c(0, 1), labels = c(1, 2))
+YOURDATA$sex <- factor(YOURDATA$sex, levels = c(1, 2), labels = c("female", "male"))
+
+head(YOURDATA)
+```
+
+<!-- If you loaded your own data, replace YOURDATA with the name of your actual dataframe -->
+
+## Summary/demographic statistics of sample
+Include code output for overall sample stats (N, mean age, gender breakdown, etc.)
+
+- The sample includes **`r nrow(YOURDATA)`** subjects
+    - **`r sum(YOURDATA$sex == "female")` (`r round(((sum(YOURDATA$sex == "female"))/nrow(YOURDATA)),2)*100`%)** of these are female
+    - average age is **`r mean(YOURDATA$age)` [`r sd(YOURDATA$age)`]**
+
+## Measures
+- Measure A
+    - Features
+- Measure B
+    - Features
+
+### Defining items, subscales, groups for analysis
+Whatever specific variables, group divisions, etc. will be used in the analyses in the next section
+
+<!-- A newer and more explicit way of calling functions with dependencies on external packages is this: `tables::tabular` -->
+
+<!-- I suggest using a more descriptive name than `table`. -->
+
+## Group comparison table
+```{r Group Table, echo=FALSE, message=FALSE, warning=FALSE}
+library(tables)
+table <- tabular((group + 1) ~ (n = 1) + sex +
+                   Format(digits = 2)*(age + var1 + var2)*(mean + sd), 
+                 data=YOURDATA)
+table
+```
+
+*At this point I wanted to make the table prettier, but using functions like `latex()` or `html()` just printed the table code rather than the pretty table. I couldn't figure out how to make it work.*
+
+I don't know the `tables` package well.
+It might not work especially well with `knitr::kable()`.
+
+```{r}
+class(table)
+```
+
+I suggest exploring the `kableExtra` [package](http://haozhu233.github.io/kableExtra/awesome_table_in_html.html).
+
+## Analyses
+```{r Analysis 1, echo=FALSE, message=FALSE, warning=FALSE}
+## Example analysis
+asscn <- lm(var2 ~ var1, data = YOURDATA)
+
+# Again, I recommend using descriptive names.
+
+# I commented-out the next command because I don't have code for this function.
+#mcSummary(asscn)
+
+ggplot(YOURDATA, aes(x=var1, y=var2)) + 
+  geom_point() +
+  geom_smooth(method="lm")
+
+```
+
+```{r Analysis 2, echo=FALSE, message=FALSE, warning=FALSE}
+
+```
+
+```{r Analysis 3, echo=FALSE, message=FALSE, warning=FALSE}
+
+```
+
+
+# Results
+
+## Analysis 1
+Results summary from analysis above.
+
+## Analysis 2
+Results summary from analysis above.
+
+## Analysis 3
+Results summary from analysis above.
+
+# Discussion
+Summarize findings
+
+## Implications
+What could the findings mean?
+
+## Strengths & Limitations
+What was great about the study?
+
+What could have been better about the study?
+
